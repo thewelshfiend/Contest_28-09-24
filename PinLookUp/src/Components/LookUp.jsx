@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import Loader from './Loader';
 import Card from './Cards';
+import { useDispatch, useSelector } from 'react-redux';
+import { cacheItem } from '../Utils/cache';
 
 const LookUp = () => {
     const { pin } = useParams();
+    const cache = useSelector((store) => (store.cache));
+    const dispatch = useDispatch();
     const [msg, setMsg] = useState('');
     const [POs, setPOs] = useState([]);
     const [updatedPOs, setUpdatedPOs] = useState([]);
@@ -13,23 +18,42 @@ const LookUp = () => {
 
     useEffect(() => {
         async function fetchData() {
-            const data = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
-            const json = await data.json();
-            setMsg(json[0].Message);
-
-            if (json[0].Message !== "No records found")
+            const cacheResult = await cache.find((item) => (item.query == pin));
+            if(cacheResult)
             {
-                setPOs(json[0].PostOffice);
-                setUpdatedPOs(json[0].PostOffice);
+                console.log(cacheResult);                
+                setPOs(cacheResult.result);
+                setUpdatedPOs(cacheResult.result);
+                setMsg(cacheResult.message);
                 setPinFound(true);
             }
             else
             {
-                setPinFound(false);
+                const data = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+                const json = await data.json();
+                setMsg(json[0].Message);
+
+                if (json[0].Message !== "No records found")
+                {
+                    setPOs(json[0].PostOffice);
+                    setUpdatedPOs(json[0].PostOffice);
+                    setPinFound(true);
+
+                    dispatch(cacheItem({
+                        query: pin,
+                        message: json[0].Message,
+                        result: json[0].PostOffice
+                    }));
+                }
+                else
+                {
+                    setPinFound(false);
+                }
             }
         }
 
         fetchData();
+        setPOs([]);
     }, []);
 
     useEffect(() => {
@@ -56,27 +80,33 @@ const LookUp = () => {
                     onChange={(e) => setSearch(e.target.value)}
                 />
             </div>
-            <div id='card-container'>
-                {
-                    pinFound ? (
+            {
+                pinFound ?
+                (
+                    !POs.length ?
+                    <Loader /> : (
                         updatedPOs && (
-                            updatedPOs.map((PO) => (
-                                <Card
-                                    key={PO.Name}
-                                    name={PO.Name}
-                                    branchType={PO.BranchType}
-                                    deliveryStatus={PO.DeliveryStatus}
-                                    state={PO.State}
-                                    district={PO.District}
-                                    division={PO.Division}
-                                />
-                            ))
+                            <div id='card-container'>
+                                {
+                                    updatedPOs.map((PO) => (
+                                            <Card
+                                                key={PO.Name}
+                                                name={PO.Name}
+                                                branchType={PO.BranchType}
+                                                deliveryStatus={PO.DeliveryStatus}
+                                                state={PO.State}
+                                                district={PO.District}
+                                                division={PO.Division}
+                                            />
+                                    ))
+                                }
+                            </div>
                         )
-                    ) : (
-                        <h5  style={{ position: 'relative', left: '76%', paddingTop: '20%' }} className='warning'>Couldn’t find the postal data you’re looking for…</h5>
                     )
-                }
-            </div>
+                ) : (
+                    <h5  style={{ textAlign: 'center', paddingTop: '17%' }} className='warning'>Couldn’t find the postal data you’re looking for…</h5>
+                )
+            }
         </div>
     );
 }
